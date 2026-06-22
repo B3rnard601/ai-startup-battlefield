@@ -15,7 +15,7 @@
     "openai": "^4.52.7",
     "@0gfoundation/0g-storage-ts-sdk": "^1.2.6",
     "ethers": "^6.13.1",
-    "uuid": "^10.0.0",
+    "uuid": "^14.0.0",
     "clsx": "^2.1.1"
   },
   "devDependencies": {
