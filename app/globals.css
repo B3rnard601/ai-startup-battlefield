@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar — terminal style */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #0E1018;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E2235;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FF5F2D;
+}
+
+/* Terminal cursor */
+.cursor::after {
+  content: '█';
+  animation: blink 1s step-end infinite;
+  color: #FF5F2D;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* CRT scanline overlay */
+.scanlines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+/* Agent color tokens */
+.agent-investor  { color: #FF8C42; }
+.agent-customer  { color: #10E8AA; }
+.agent-competitor{ color: #FF3B4E; }
+.agent-journalist{ color: #4D9DFF; }
+.agent-employee  { color: #9BA8C4; }
+.agent-system    { color: #616880; }
+
+/* Metric pill */
+.metric-up   { color: #10E8AA; }
+.metric-down { color: #FF3B4E; }
+.metric-flat { color: #616880; }
+
+/* Terminal line animation */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.terminal-line {
+  animation: slideUp 0.2s ease-out;
+}
+
+/* Phase badge */
+.phase-idea         { background: #1E2235; color: #9BA8C4; }
+.phase-build        { background: #1a2235; color: #4D9DFF; }
+.phase-market       { background: #1a2820; color: #10E8AA; }
+.phase-competition  { background: #2a1a1a; color: #FF8C42; }
+.phase-fundraising  { background: #2a2018; color: #FFCC42; }
+.phase-scale        { background: #1e1a2e; color: #B042FF; }
+.phase-dead         { background: #2a1a1a; color: #FF3B4E; }
+.phase-unicorn      { background: #1a2a1a; color: #10E8AA; }
