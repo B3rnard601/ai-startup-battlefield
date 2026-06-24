@@ -2,38 +2,47 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import type { GameState, StreamEvent, AgentType, GameEvent } from '@/types/game';
+import type { GameState, StreamEvent, AgentType } from '@/types/game';
 import MetricsDashboard from '@/components/MetricsDashboard';
 import NewsTimeline from '@/components/NewsTimeline';
 
-const AGENT_LABELS: Record<AgentType | string, string> = {
-  investor: 'INVESTOR',
-  competitor: 'COMPETITOR',
-  customer: 'CUSTOMER',
-  journalist: 'PRESS',
-  employee: 'TEAM',
-  system: 'SYSTEM',
+const AGENT_CONFIG: Record<string, { color: string; bg: string; label: string; icon: string }> = {
+  investor:   { color: '#FF8C42', bg: 'rgba(255,140,66,0.06)',  label: 'INVESTOR',   icon: '◈' },
+  competitor: { color: '#FF3B4E', bg: 'rgba(255,59,78,0.06)',   label: 'COMPETITOR', icon: '⚔' },
+  customer:   { color: '#10E8AA', bg: 'rgba(16,232,170,0.06)',  label: 'CUSTOMER',   icon: '◉' },
+  journalist: { color: '#4D9DFF', bg: 'rgba(77,157,255,0.06)',  label: 'PRESS',      icon: '◎' },
+  employee:   { color: '#9BA8C4', bg: 'rgba(155,168,196,0.06)', label: 'TEAM',       icon: '◌' },
+  system:     { color: '#616880', bg: 'transparent',             label: 'SYSTEM',     icon: '—' },
 };
 
-const PHASE_LABELS: Record<string, string> = {
-  idea: 'IDEA STAGE',
-  build: 'BUILDING',
-  market: 'GO-TO-MARKET',
-  competition: 'COMPETITION',
-  fundraising: 'FUNDRAISING',
-  scale: 'SCALING',
-  dead: 'BANKRUPT',
-  unicorn: 'UNICORN 🦄',
-  acquired: 'ACQUIRED',
-  ipo: 'IPO',
+const PHASE_CONFIG: Record<string, { label: string; color: string }> = {
+  idea:        { label: 'IDEA STAGE',   color: '#9BA8C4' },
+  build:       { label: 'BUILDING',     color: '#4D9DFF' },
+  market:      { label: 'GO-TO-MARKET', color: '#10E8AA' },
+  competition: { label: 'COMPETITION',  color: '#FF8C42' },
+  fundraising: { label: 'FUNDRAISING',  color: '#FFCC42' },
+  scale:       { label: 'SCALING',      color: '#B042FF' },
+  dead:        { label: 'BANKRUPT',     color: '#FF3B4E' },
+  unicorn:     { label: 'UNICORN 🦄',   color: '#10E8AA' },
+  acquired:    { label: 'ACQUIRED',     color: '#B042FF' },
+  ipo:         { label: 'IPO',          color: '#FFCC42' },
 };
+
+const QUICK_ACTIONS = [
+  'Pitch the lead investor for seed funding',
+  'Launch MVP to first 10 customers',
+  'Hire a CTO from a top tech company',
+  'Cut prices to undercut the competitor',
+  'Respond to the journalist story',
+];
 
 interface TerminalLine {
   id: string;
-  type: 'player' | AgentType | 'system' | 'news';
+  type: string;
   actor?: string;
   content: string;
   streaming?: boolean;
+  isNew?: boolean;
 }
 
 export default function GamePage() {
@@ -48,12 +57,14 @@ export default function GamePage() {
   const [loadError, setLoadError] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   const [gameOver, setGameOver] = useState<string | null>(null);
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [notification, setNotification] = useState<{ text: string; type: 'good' | 'bad' | 'info' } | null>(null);
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const streamingLineIdRef = useRef<string | null>(null);
 
-  // ── Load game state ──────────────────────────────────────────────────────
+  // Load game state
   useEffect(() => {
     async function loadGame() {
       try {
@@ -63,48 +74,21 @@ export default function GamePage() {
         const state: GameState = data.gameState;
         setGameState(state);
 
-        // Reconstruct terminal from history
         const termLines: TerminalLine[] = state.history.map((ev) => ({
           id: ev.id,
-          type: ev.actor === 'player' ? 'player' : (ev.agentType ?? 'system') as any,
+          type: ev.actor === 'player' ? 'player' : (ev.agentType ?? 'system'),
           actor: ev.agentType ? undefined : ev.actor,
           content: ev.content,
         }));
 
         if (termLines.length === 0) {
-          // Brand new game — show world intro
-          termLines.push({
-            id: 'sys-start',
-            type: 'system',
-            content: `World initialized. Your startup "${state.startupName}" enters the ${state.sector} market.`,
-          });
-          termLines.push({
-            id: 'sys-cash',
-            type: 'system',
-            content: `Starting capital: $${state.metrics.cash.toLocaleString()} | Runway: ${state.metrics.runway} months`,
-          });
-          termLines.push({
-            id: 'sys-tip',
-            type: 'system',
-            content: `Competitors detected: ${state.agents.competitors.map((c) => c.name).join(', ')}`,
-          });
+          termLines.push(
+            { id: 'sys-1', type: 'system', content: `World initialized — ${state.startupName} enters the ${state.sector} market.` },
+            { id: 'sys-2', type: 'system', content: `Starting capital: $${state.metrics.cash.toLocaleString()} · Runway: ${state.metrics.runway} months` },
+            { id: 'sys-3', type: 'system', content: `Competitors: ${state.agents.competitors.map(c => c.name).join(', ')}` },
+          );
         }
-
         setLines(termLines);
-
-        // Re-show opening investor response if fresh session
-        if (data.source === 'memory' && (data as any).initialAgentResponse) {
-          const r = (data as any).initialAgentResponse;
-          setLines((prev) => [
-            ...prev,
-            {
-              id: 'investor-open',
-              type: 'investor',
-              actor: r.agentName,
-              content: r.content,
-            },
-          ]);
-        }
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load game');
       }
@@ -112,30 +96,28 @@ export default function GamePage() {
     loadGame();
   }, [sessionId]);
 
-  // Auto-scroll terminal
   useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
+    if (terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
   }, [lines]);
 
-  // ── Handle player action ──────────────────────────────────────────────────
-  const handleAction = useCallback(async () => {
-    if (!input.trim() || isStreaming || !gameState) return;
+  function showNotif(text: string, type: 'good' | 'bad' | 'info') {
+    setNotification({ text, type });
+    setTimeout(() => setNotification(null), 3500);
+  }
 
-    const playerAction = input.trim();
+  const handleAction = useCallback(async (actionText?: string) => {
+    const playerAction = (actionText ?? input).trim();
+    if (!playerAction || isStreaming || !gameState) return;
     setInput('');
+    setShowQuickActions(false);
     setIsStreaming(true);
 
-    // Add player line immediately
-    setLines((prev) => [
-      ...prev,
-      {
-        id: `player-${Date.now()}`,
-        type: 'player',
-        content: playerAction,
-      },
-    ]);
+    setLines((prev) => [...prev, {
+      id: `player-${Date.now()}`,
+      type: 'player',
+      content: playerAction,
+      isNew: true,
+    }]);
 
     try {
       const res = await fetch('/api/game/action', {
@@ -143,8 +125,7 @@ export default function GamePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, playerAction }),
       });
-
-      if (!res.body) throw new Error('No response stream');
+      if (!res.body) throw new Error('No stream');
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -153,26 +134,20 @@ export default function GamePage() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const parts = buffer.split('\n\n');
         buffer = parts.pop() ?? '';
-
         for (const part of parts) {
           if (!part.startsWith('data: ')) continue;
-          const event: StreamEvent = JSON.parse(part.slice(6));
-          handleStreamEvent(event);
+          handleStreamEvent(JSON.parse(part.slice(6)));
         }
       }
     } catch (err) {
-      setLines((prev) => [
-        ...prev,
-        {
-          id: `err-${Date.now()}`,
-          type: 'system',
-          content: `✗ Error: ${err instanceof Error ? err.message : 'Stream failed'}`,
-        },
-      ]);
+      setLines((prev) => [...prev, {
+        id: `err-${Date.now()}`,
+        type: 'system',
+        content: `✗ ${err instanceof Error ? err.message : 'Stream failed'}`,
+      }]);
     } finally {
       setIsStreaming(false);
       streamingLineIdRef.current = null;
@@ -185,65 +160,40 @@ export default function GamePage() {
       case 'agent_start': {
         const lineId = `agent-${event.agent}-${Date.now()}`;
         streamingLineIdRef.current = lineId;
-        setLines((prev) => [
-          ...prev,
-          { id: lineId, type: event.agent, actor: event.agentName, content: '', streaming: true },
-        ]);
+        setLines((prev) => [...prev, { id: lineId, type: event.agent, actor: event.agentName, content: '', streaming: true, isNew: true }]);
         break;
       }
-
       case 'token': {
         const id = streamingLineIdRef.current;
         if (!id) return;
-        setLines((prev) =>
-          prev.map((l) => (l.id === id ? { ...l, content: l.content + event.content } : l))
-        );
+        setLines((prev) => prev.map((l) => l.id === id ? { ...l, content: l.content + event.content } : l));
         break;
       }
-
       case 'agent_end': {
         const id = streamingLineIdRef.current;
         if (!id) return;
-        setLines((prev) =>
-          prev.map((l) => (l.id === id ? { ...l, streaming: false } : l))
-        );
+        setLines((prev) => prev.map((l) => l.id === id ? { ...l, streaming: false } : l));
         streamingLineIdRef.current = null;
         break;
       }
-
       case 'metrics_update': {
-        setGameState((prev) =>
-          prev ? { ...prev, metrics: event.metrics, day: prev.day + 1 } : prev
-        );
+        setGameState((prev) => prev ? { ...prev, metrics: event.metrics, day: prev.day + 1 } : prev);
+        if ((event.delta.revenue ?? 0) > 0) showNotif(`+$${event.delta.revenue?.toLocaleString()} revenue`, 'good');
+        if ((event.delta.reputation ?? 0) < -5) showNotif('Reputation dropping', 'bad');
         break;
       }
-
       case 'snapshot_saved': {
-        setSaveStatus(`Saved to 0G Storage — Day ${event.day}`);
+        setSaveStatus(`Day ${event.day} saved`);
         setTimeout(() => setSaveStatus(''), 4000);
-        setLines((prev) => [
-          ...prev,
-          {
-            id: `snap-${Date.now()}`,
-            type: 'system',
-            content: `◎ Checkpoint saved to 0G Storage — Hash: ${event.rootHash.slice(0, 20)}...`,
-          },
-        ]);
+        showNotif('Saved to 0G Storage', 'info');
         break;
       }
-
-      case 'game_over': {
+      case 'game_over':
         setGameOver(event.outcome);
         break;
-      }
-
-      case 'error': {
-        setLines((prev) => [
-          ...prev,
-          { id: `err-${Date.now()}`, type: 'system', content: `✗ ${event.message}` },
-        ]);
+      case 'error':
+        setLines((prev) => [...prev, { id: `err-${Date.now()}`, type: 'system', content: `✗ ${event.message}` }]);
         break;
-      }
     }
   }
 
@@ -255,143 +205,132 @@ export default function GamePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId }),
       });
-      const data = await res.json();
-      setSaveStatus(`Saved — ${data.rootHash?.slice(0, 16)}...`);
+      const d = await res.json();
+      setSaveStatus(`Saved`);
+      showNotif('Checkpoint saved to 0G Storage', 'info');
       setTimeout(() => setSaveStatus(''), 4000);
-    } catch {
-      setSaveStatus('Save failed');
-    }
+    } catch { setSaveStatus('Failed'); }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  if (loadError) return (
+    <div className="min-h-screen flex items-center justify-center flex-col gap-4">
+      <p className="text-danger text-sm">✗ {loadError}</p>
+      <button onClick={() => router.push('/')} className="text-text-muted text-xs underline">← New game</button>
+    </div>
+  );
 
-  if (loadError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-danger">✗ {loadError}</p>
-          <button onClick={() => router.push('/')} className="text-text-muted text-sm underline">
-            ← Start new game
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (!gameState) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-text-muted text-sm animate-pulse">◌ Loading from 0G Storage...</p>
+    </div>
+  );
 
-  if (!gameState) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-text-muted text-sm animate-pulse">
-          ◌ Loading from 0G Storage...
-        </p>
-      </div>
-    );
-  }
-
-  const phase = gameState.phase;
   const m = gameState.metrics;
+  const phase = PHASE_CONFIG[gameState.phase] ?? PHASE_CONFIG.idea;
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      <div className="scanlines" />
+    <div className="h-screen flex flex-col overflow-hidden bg-bg-base">
+      <div className="scanlines pointer-events-none" />
 
-      {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <header className="border-b border-border bg-bg-surface flex items-center px-4 py-2 gap-4 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-fire font-bold text-sm">▶</span>
-          <span className="text-text-primary font-semibold text-sm">{gameState.startupName}</span>
-          <span className={`text-xs px-2 py-0.5 phase-${phase}`}>
-            {PHASE_LABELS[phase] ?? phase.toUpperCase()}
-          </span>
+      {/* ── Notification toast ──────────────────────────────────── */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2 text-xs font-medium animate-slide-up border
+          ${notification.type === 'good' ? 'border-growth text-growth bg-bg-surface' :
+            notification.type === 'bad' ? 'border-danger text-danger bg-bg-surface' :
+            'border-info text-info bg-bg-surface'}`}>
+          {notification.text}
         </div>
+      )}
 
+      {/* ── Top header bar ──────────────────────────────────────── */}
+      <header className="border-b border-border bg-bg-surface flex items-center px-4 py-2 gap-3 shrink-0">
+        <span className="text-fire font-bold">▶</span>
+        <span className="text-text-primary font-semibold text-sm">{gameState.startupName}</span>
+        <span className="text-xs px-2 py-0.5 border" style={{ borderColor: phase.color, color: phase.color }}>
+          {phase.label}
+        </span>
         <div className="flex items-center gap-4 ml-2 text-xs text-text-muted">
           <span>DAY <span className="text-text-primary font-medium">{gameState.day}</span></span>
-          <span>MRR <span className="text-growth font-medium">${m.revenue.toLocaleString()}</span></span>
-          <span>USERS <span className="text-growth font-medium">{m.users.toLocaleString()}</span></span>
-          <span>RUNWAY <span className={m.runway < 3 ? 'text-danger' : 'text-text-primary'} style={{ fontWeight: 500 }}>{m.runway}mo</span></span>
+          <span className="hidden sm:inline">MRR <span className="text-growth font-medium">${m.revenue.toLocaleString()}</span></span>
+          <span className="hidden sm:inline">USERS <span className="text-growth font-medium">{m.users.toLocaleString()}</span></span>
+          <span>RUNWAY <span className={m.runway < 3 ? 'text-danger font-medium' : 'text-text-primary font-medium'}>{m.runway}mo</span></span>
         </div>
-
-        <div className="ml-auto flex items-center gap-3">
-          {saveStatus && (
-            <span className="text-xs text-growth animate-fade-in">{saveStatus}</span>
-          )}
-          <button
-            onClick={handleManualSave}
-            disabled={isStreaming}
-            className="text-xs text-text-muted border border-border px-3 py-1 hover:border-growth hover:text-growth transition-colors disabled:opacity-40"
-          >
-            ◎ Save to 0G
+        <div className="ml-auto flex items-center gap-2">
+          {saveStatus && <span className="text-xs text-growth">{saveStatus}</span>}
+          <button onClick={handleManualSave} disabled={isStreaming}
+            className="text-xs text-text-muted border border-border px-2 py-1 hover:border-growth hover:text-growth transition-colors disabled:opacity-30">
+            ◎ Save
           </button>
-          <button
-            onClick={() => router.push('/')}
-            className="text-xs text-text-muted hover:text-text-primary transition-colors"
-          >
-            ← New game
+          <button onClick={() => router.push('/')} className="text-xs text-text-muted hover:text-text-primary transition-colors">
+            ← Exit
           </button>
         </div>
       </header>
 
-      {/* ── Main layout ─────────────────────────────────────────────────── */}
+      {/* ── Main layout ─────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── LEFT: Terminal ───────────────────────────────────────────── */}
+        {/* ── Terminal panel ────────────────────────────────────── */}
         <div className="flex flex-col flex-1 border-r border-border overflow-hidden">
-          {/* Terminal header */}
           <div className="border-b border-border px-4 py-2 bg-bg-surface flex items-center gap-2 shrink-0">
-            <span className="text-xs text-text-muted tracking-widest">COMMAND TERMINAL</span>
-            <span className="ml-auto text-xs text-text-muted">
-              {gameState.sector} · {gameState.founderStyle} founder
-            </span>
+            <span className="text-xs text-text-muted tracking-widest">SITUATION ROOM</span>
+            <span className="ml-auto text-xs text-text-muted">{gameState.sector} · {gameState.founderStyle}</span>
           </div>
 
-          {/* Terminal output */}
-          <div
-            ref={terminalRef}
-            className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
-          >
-            {lines.map((line) => (
-              <TerminalLine key={line.id} line={line} />
-            ))}
-
+          {/* Feed */}
+          <div ref={terminalRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+            {lines.map((line) => <FeedLine key={line.id} line={line} />)}
             {isStreaming && !streamingLineIdRef.current && (
-              <div className="text-text-muted text-xs animate-pulse">◌ Agents responding...</div>
+              <div className="text-text-muted text-xs animate-pulse flex items-center gap-2">
+                <span className="inline-block w-3 h-3 border border-text-muted rounded-full animate-spin border-t-transparent" />
+                Agents processing...
+              </div>
+            )}
+            {gameOver && (
+              <GameOverCard outcome={gameOver} onRestart={() => router.push('/')} />
             )}
           </div>
 
-          {/* Terminal input */}
-          <div className="border-t border-border bg-bg-surface shrink-0">
-            {gameOver ? (
-              <div className="px-4 py-4 text-center">
-                <GameOverBanner outcome={gameOver} onRestart={() => router.push('/')} />
-              </div>
-            ) : (
+          {/* Input area */}
+          {!gameOver && (
+            <div className="border-t border-border bg-bg-surface shrink-0">
+              {showQuickActions && (
+                <div className="border-b border-border p-3 grid grid-cols-1 gap-1">
+                  {QUICK_ACTIONS.map((action) => (
+                    <button key={action} onClick={() => handleAction(action)}
+                      className="text-left text-xs text-text-muted hover:text-text-primary hover:bg-bg-elevated px-2 py-1.5 transition-colors">
+                      › {action}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center px-4 py-3 gap-3">
-                <span className="text-fire text-sm shrink-0">›</span>
+                <span className="text-fire shrink-0">›</span>
                 <input
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAction()}
-                  placeholder={isStreaming ? 'Agents are responding...' : 'What do you do next?'}
+                  placeholder={isStreaming ? 'Agents are responding...' : 'What do you do?'}
                   disabled={isStreaming}
                   autoFocus
                   className="flex-1 bg-transparent text-text-primary text-sm placeholder:text-text-muted focus:outline-none disabled:opacity-40"
                 />
-                <button
-                  onClick={handleAction}
-                  disabled={!input.trim() || isStreaming}
-                  className="text-xs text-fire border border-fire px-3 py-1 hover:bg-fire hover:text-white transition-all disabled:opacity-30"
-                >
-                  SEND ↵
+                <button onClick={() => setShowQuickActions(v => !v)}
+                  className="text-xs text-text-muted hover:text-text-primary border border-border px-2 py-1 transition-colors shrink-0">
+                  ⚡
+                </button>
+                <button onClick={() => handleAction()} disabled={!input.trim() || isStreaming}
+                  className="text-xs text-fire border border-fire px-3 py-1 hover:bg-fire hover:text-white transition-all disabled:opacity-30 shrink-0">
+                  ↵
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* ── RIGHT: Dashboard ─────────────────────────────────────────── */}
-        <div className="w-80 xl:w-96 flex flex-col overflow-hidden shrink-0">
+        {/* ── Right panel ───────────────────────────────────────── */}
+        <div className="w-72 xl:w-80 flex flex-col overflow-hidden shrink-0">
           <MetricsDashboard state={gameState} />
           <NewsTimeline
             events={gameState.history.filter((e) => e.eventType === 'news')}
@@ -404,61 +343,49 @@ export default function GamePage() {
   );
 }
 
-// ── Terminal Line Component ───────────────────────────────────────────────────
-
-function TerminalLine({ line }: { line: TerminalLine }) {
-  const agentClass = `agent-${line.type}`;
-  const prefix = AGENT_LABELS[line.type] ?? line.type.toUpperCase();
+function FeedLine({ line }: { line: TerminalLine }) {
+  const cfg = AGENT_CONFIG[line.type] ?? AGENT_CONFIG.system;
 
   if (line.type === 'player') {
     return (
-      <div className="terminal-line flex gap-2">
-        <span className="text-fire shrink-0 text-sm">›</span>
+      <div className="flex gap-2 items-baseline terminal-line">
+        <span className="text-fire text-sm shrink-0">›</span>
         <span className="text-text-primary text-sm">{line.content}</span>
       </div>
     );
   }
-
   if (line.type === 'system') {
-    return (
-      <div className="terminal-line text-agent-system text-xs py-1">
-        — {line.content}
-      </div>
-    );
+    return <div className="text-agent-system text-xs py-0.5 terminal-line">— {line.content}</div>;
   }
-
   return (
-    <div className="terminal-line">
-      <div className="flex items-baseline gap-2 mb-1">
-        <span className={`${agentClass} text-xs font-semibold tracking-widest shrink-0`}>
-          [{prefix}]
+    <div className="terminal-line rounded-sm overflow-hidden" style={{ background: cfg.bg }}>
+      <div className="flex items-center gap-2 px-2 pt-2 pb-1">
+        <span className="text-[10px] font-bold tracking-widest" style={{ color: cfg.color }}>
+          {cfg.icon} {cfg.label}
         </span>
-        {line.actor && (
-          <span className="text-text-muted text-xs">{line.actor}</span>
-        )}
+        {line.actor && <span className="text-[10px] text-text-muted">{line.actor}</span>}
       </div>
-      <div className="text-text-primary text-sm leading-relaxed pl-2 border-l border-border ml-1">
+      <div className="px-3 pb-2 text-sm text-text-primary leading-relaxed border-l-2 ml-2" style={{ borderColor: cfg.color }}>
         {line.content}
-        {line.streaming && <span className="cursor" />}
+        {line.streaming && <span style={{ color: cfg.color }} className="animate-blink">█</span>}
       </div>
     </div>
   );
 }
 
-// ── Game Over Banner ──────────────────────────────────────────────────────────
-
-function GameOverBanner({ outcome, onRestart }: { outcome: string; onRestart: () => void }) {
+function GameOverCard({ outcome, onRestart }: { outcome: string; onRestart: () => void }) {
   const isWin = ['unicorn', 'acquired', 'ipo'].includes(outcome);
-  const messages: Record<string, string> = {
-    dead: 'STARTUP BANKRUPT. The market has spoken.',
-    unicorn: 'UNICORN STATUS ACHIEVED. You changed the world.',
-    acquired: 'ACQUISITION COMPLETE. A new chapter begins.',
-    ipo: 'IPO SUCCESSFUL. See you on the NASDAQ.',
+  const msgs: Record<string, string> = {
+    dead: 'STARTUP BANKRUPT — The market has spoken.',
+    unicorn: 'UNICORN ACHIEVED — You changed the world.',
+    acquired: 'ACQUIRED — A new chapter begins.',
+    ipo: 'IPO COMPLETE — See you on the NASDAQ.',
   };
-
   return (
-    <div className={`space-y-2 ${isWin ? 'text-growth' : 'text-danger'}`}>
-      <p className="font-bold tracking-widest text-sm">{messages[outcome]}</p>
+    <div className={`border p-4 text-center space-y-2 ${isWin ? 'border-growth' : 'border-danger'}`}>
+      <p className={`font-bold tracking-widest text-sm ${isWin ? 'text-growth' : 'text-danger'}`}>
+        {msgs[outcome] ?? outcome.toUpperCase()}
+      </p>
       <button onClick={onRestart} className="text-xs text-text-muted underline">
         Start a new startup →
       </button>
