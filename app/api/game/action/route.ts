@@ -213,12 +213,13 @@ Rules:
           });
         }
 
-        // ── Checkpoint to 0G Storage every 5 days ─────────────────────────
+        // ── Checkpoint to 0G Storage every action ─────────────────────────
         if (shouldCheckpoint(state)) {
           try {
             const rootHash = await saveSnapshot(state);
             state = addSnapshot(state, rootHash);
-            updateGameState(sessionId, () => state as GameState);
+            state.sessionId = rootHash;              // ← this line is the actual fix
+            createSession(state);                     // re-key in memory under new hash
             send(controller, { type: 'snapshot_saved', rootHash, day: state.day });
           } catch (err) {
             console.error('[0G Storage] Checkpoint failed:', err);

@@ -253,5 +253,5 @@ export function isGameOver(state: GameState): boolean {
 }
 
 export function shouldCheckpoint(state: GameState): boolean {
-  return state.day % 5 === 0;
+  return true; // every action is now resumable
 }

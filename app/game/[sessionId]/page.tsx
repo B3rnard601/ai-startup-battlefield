@@ -186,6 +186,7 @@ export default function GamePage() {
         setSaveStatus(`Day ${event.day} saved`);
         setTimeout(() => setSaveStatus(''), 4000);
         showNotif('Saved to 0G Storage', 'info');
+        router.replace(`/game/${event.rootHash}`);   // ← URL now always = latest resumable state
         break;
       }
       case 'game_over':
