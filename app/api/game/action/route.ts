@@ -1,28 +1,12 @@
 import type { AgentType, GameState, StreamEvent, MetricsDelta } from '@/types/game';
-import {
-  getGameState,
-  updateGameState,
-  getAgentMemory,
-  appendAgentMemory,
-} from '@/lib/session-memory';
+import { getGameState, updateGameState, getAgentMemory, appendAgentMemory, createSession } from '@/lib/session-memory';
 import { streamAgent, computeMetrics } from '@/lib/0g-compute';
-import { saveSnapshot } from '@/lib/0g-storage';
-import {
-  selectReactingAgents,
-  buildGameContext,
-  applyDelta,
-  addEvent,
-  addSnapshot,
-  shouldCheckpoint,
-  isGameOver,
-} from '@/lib/game-engine';
+import { saveSnapshot, loadSnapshot } from '@/lib/0g-storage';
+import { selectReactingAgents, buildGameContext, applyDelta, addEvent, addSnapshot, shouldCheckpoint, isGameOver } from '@/lib/game-engine';
 import { buildInvestorPrompt, getInvestorProfile } from '@/lib/agents/investor';
 import { buildCompetitorPrompt } from '@/lib/agents/competitor';
 import { buildCustomerPrompt } from '@/lib/agents/customer';
-import {
-  buildJournalistPrompt,
-  determineSentiment,
-} from '@/lib/agents/journalist';
+import { buildJournalistPrompt, determineSentiment } from '@/lib/agents/journalist';
 import { buildEmployeePrompt } from '@/lib/agents/employee';
 
 export const maxDuration = 90;
@@ -45,12 +29,17 @@ export async function POST(request: Request) {
         // ── Load game state ────────────────────────────────────────────────
         let state = getGameState(sessionId);
         if (!state) {
-          send(controller, {
-            type: 'error',
-            message: 'Session not found. Try loading from a snapshot hash.',
-          });
-          controller.close();
-          return;
+          try {
+            state = await loadSnapshot(sessionId);   // sessionId IS the root hash
+            createSession(state);
+          } catch {
+            send(controller, {
+              type: 'error',
+              message: 'Session not found. Try loading from a snapshot hash.',
+            });
+            controller.close();
+            return;
+          }
         }
 
         // ── Record player decision ─────────────────────────────────────────

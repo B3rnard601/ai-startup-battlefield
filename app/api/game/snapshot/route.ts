@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getGameState, updateGameState } from '@/lib/session-memory';
-import { saveSnapshot } from '@/lib/0g-storage';
+import { getGameState, updateGameState, createSession } from '@/lib/session-memory';
+import { saveSnapshot, loadSnapshot } from '@/lib/0g-storage';
 import { addSnapshot } from '@/lib/game-engine';
 
 export const maxDuration = 30;
@@ -12,9 +12,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'sessionId required' }, { status: 400 });
   }
 
-  const state = getGameState(sessionId);
+  let state = getGameState(sessionId);
   if (!state) {
-    return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    try {
+      state = await loadSnapshot(sessionId);
+      createSession(state);
+    } catch {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
   }
 
   try {
