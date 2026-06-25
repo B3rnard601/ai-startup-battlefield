@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'sessionId required' }, { status: 400 });
   }
 
+  // Memory first, 0G Storage fallback
   let state = getGameState(sessionId);
   if (!state) {
     try {
@@ -24,19 +25,19 @@ export async function POST(request: Request) {
 
   try {
     const rootHash = await saveSnapshot(state);
-    updateGameState(sessionId, (s) => addSnapshot(s, rootHash));
+    state = addSnapshot(state, rootHash);
+    state.sessionId = rootHash; // advance pointer
+    createSession(state);       // register under new hash
+    updateGameState(sessionId, () => state!);
 
     return NextResponse.json({
       rootHash,
       day: state.day,
-      message: `Game state at Day ${state.day} saved to 0G Storage permanently.`,
+      message: `Day ${state.day} saved to 0G Storage.`,
     });
   } catch (err) {
     return NextResponse.json(
-      {
-        error: '0G Storage upload failed',
-        detail: err instanceof Error ? err.message : 'Unknown error',
-      },
+      { error: '0G Storage upload failed', detail: err instanceof Error ? err.message : 'Unknown' },
       { status: 500 }
     );
   }

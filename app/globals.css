@@ -93,3 +93,77 @@ html, body {
 .phase-scale        { background: #1e1a2e; color: #B042FF; }
 .phase-dead         { background: #2a1a1a; color: #FF3B4E; }
 .phase-unicorn      { background: #1a2a1a; color: #10E8AA; }
+
+/* ─── Event Scene Animations ─────────────────────────────────────── */
+
+@keyframes sceneEnter {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes sceneShake {
+  0%,100% { transform: translateX(0); }
+  15%     { transform: translateX(-8px); }
+  30%     { transform: translateX(8px); }
+  45%     { transform: translateX(-5px); }
+  60%     { transform: translateX(5px); }
+}
+@keyframes pressFlash {
+  0%,100%  { opacity: 0; }
+  8%,22%   { opacity: 0.18; }
+  15%      { opacity: 0; }
+  55%,65%  { opacity: 0.12; }
+  60%      { opacity: 0; }
+}
+@keyframes barGrow {
+  from { transform: scaleY(0); transform-origin: bottom; }
+  to   { transform: scaleY(1); transform-origin: bottom; }
+}
+@keyframes barGrowOrigin {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+@keyframes tickerScroll {
+  from { transform: translateX(110%); }
+  to   { transform: translateX(-110%); }
+}
+@keyframes urgencyRing {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes starPop {
+  0%   { transform: scale(0) rotate(-20deg); opacity: 0; }
+  65%  { transform: scale(1.25) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes floatDollar {
+  0%   { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-50px); opacity: 0; }
+}
+@keyframes timerBar {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+@keyframes bubblePop {
+  0%   { transform: scale(0) translateY(6px); opacity: 0; }
+  70%  { transform: scale(1.08) translateY(0); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+@keyframes chartLine {
+  from { stroke-dashoffset: 300; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes liveBlip {
+  0%,100% { opacity: 1; }
+  50%     { opacity: 0.2; }
+}
+@keyframes rotateIn {
+  from { transform: rotate(-8deg) scale(0.9); opacity: 0; }
+  to   { transform: rotate(-2deg) scale(1); opacity: 1; }
+}
+.scene-enter     { animation: sceneEnter 0.35s cubic-bezier(.2,.8,.3,1) forwards; }
+.scene-shake     { animation: sceneShake 0.5s ease-out; }
+.bar-grow        { animation: barGrowOrigin 0.8s cubic-bezier(.2,.8,.3,1) forwards; transform-origin: bottom; }
+.star-pop        { animation: starPop 0.4s cubic-bezier(.2,.8,.3,1) forwards; }
+.bubble-pop      { animation: bubblePop 0.4s cubic-bezier(.2,.8,.3,1) forwards; }
+.rotate-in       { animation: rotateIn 0.45s cubic-bezier(.2,.8,.3,1) forwards; }
+.live-blip       { animation: liveBlip 1s step-start infinite; }

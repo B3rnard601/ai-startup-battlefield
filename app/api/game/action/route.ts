@@ -1,12 +1,29 @@
 import type { AgentType, GameState, StreamEvent, MetricsDelta } from '@/types/game';
-import { getGameState, updateGameState, getAgentMemory, appendAgentMemory, createSession } from '@/lib/session-memory';
+import {
+  getGameState,
+  updateGameState,
+  getAgentMemory,
+  appendAgentMemory,
+  createSession,
+} from '@/lib/session-memory';
 import { streamAgent, computeMetrics } from '@/lib/0g-compute';
 import { saveSnapshot, loadSnapshot } from '@/lib/0g-storage';
-import { selectReactingAgents, buildGameContext, applyDelta, addEvent, addSnapshot, shouldCheckpoint, isGameOver } from '@/lib/game-engine';
+import {
+  selectReactingAgents,
+  buildGameContext,
+  applyDelta,
+  addEvent,
+  addSnapshot,
+  shouldCheckpoint,
+  isGameOver,
+} from '@/lib/game-engine';
 import { buildInvestorPrompt, getInvestorProfile } from '@/lib/agents/investor';
 import { buildCompetitorPrompt } from '@/lib/agents/competitor';
 import { buildCustomerPrompt } from '@/lib/agents/customer';
-import { buildJournalistPrompt, determineSentiment } from '@/lib/agents/journalist';
+import {
+  buildJournalistPrompt,
+  determineSentiment,
+} from '@/lib/agents/journalist';
 import { buildEmployeePrompt } from '@/lib/agents/employee';
 
 export const maxDuration = 90;
@@ -26,16 +43,16 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // ── Load game state ────────────────────────────────────────────────
+        // ── Load game state — memory first, then 0G Storage fallback ──────
         let state = getGameState(sessionId);
         if (!state) {
           try {
-            state = await loadSnapshot(sessionId);   // sessionId IS the root hash
+            state = await loadSnapshot(sessionId);
             createSession(state);
           } catch {
             send(controller, {
               type: 'error',
-              message: 'Session not found. Try loading from a snapshot hash.',
+              message: 'Session not found. Try reloading the page.',
             });
             controller.close();
             return;
@@ -213,17 +230,18 @@ Rules:
           });
         }
 
-        // ── Checkpoint to 0G Storage every action ─────────────────────────
+        // ── Checkpoint to 0G Storage every turn ───────────────────────────
+        // Root hash advances each save — URL becomes the live save pointer
         if (shouldCheckpoint(state)) {
           try {
             const rootHash = await saveSnapshot(state);
             state = addSnapshot(state, rootHash);
-            state.sessionId = rootHash;              // ← this line is the actual fix
-            createSession(state);                     // re-key in memory under new hash
+            state.sessionId = rootHash;   // advance the permanent address
+            createSession(state);         // register under new hash
+            updateGameState(sessionId, () => state as GameState);
             send(controller, { type: 'snapshot_saved', rootHash, day: state.day });
           } catch (err) {
             console.error('[0G Storage] Checkpoint failed:', err);
-            // Non-fatal — game continues without checkpoint
           }
         }
 

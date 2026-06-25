@@ -253,5 +253,5 @@ export function isGameOver(state: GameState): boolean {
 }
 
 export function shouldCheckpoint(state: GameState): boolean {
-  return true; // every action is now resumable
+  return true; // every action is resumable via 0G Storage
 }
